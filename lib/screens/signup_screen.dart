@@ -12,15 +12,16 @@ class SignUpScreen extends StatefulWidget {
 class SignUpScreenState extends State<SignUpScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  final TextEditingController userNameController = TextEditingController();
+  final TextEditingController usernameController = TextEditingController();
   final TextEditingController fullNameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController confirmPasswordController =
       TextEditingController();
   final TextEditingController phoneController = TextEditingController();
-  String? selectedGender;
-  String? selectedCountry;
+
+  String? selectedGender = 'Male';
+  String? selectedCountry = 'Kenya';
 
   final List<String> genderOptions = ['Male', 'Female', 'Other'];
   final List<String> countryOptions = ['Kenya', 'USA', 'UK', 'Canada', 'India'];
@@ -47,7 +48,7 @@ class SignUpScreenState extends State<SignUpScreen> {
           .collection('users')
           .doc(userCredential.user!.uid)
           .set({
-            'userName': userNameController.text.trim(),
+            'userName': usernameController.text.trim(),
             'fullName': fullNameController.text.trim(),
             'email': emailController.text.trim(),
             'phone': phoneController.text.trim(),
@@ -56,20 +57,14 @@ class SignUpScreenState extends State<SignUpScreen> {
             'profile_picture': '',
             'enrolled_courses': [],
             'completed_courses': [],
-            'course_progress': {},
-            'study_time': 0,
-            'last_active': Timestamp.now(),
-            'notifications': [],
-            'certificates': [],
             'uid': userCredential.user!.uid,
-            'createdAt': Timestamp.now(),
+            'createdAt': FieldValue.serverTimestamp(),
           });
 
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('✅ Signup Successful!')));
-
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
@@ -82,7 +77,10 @@ class SignUpScreenState extends State<SignUpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Sign Up')),
+      appBar: AppBar(
+        title: const Text('Sign Up'),
+        backgroundColor: Colors.teal[900],
+      ),
       body: Center(
         child: Card(
           margin: const EdgeInsets.all(16),
@@ -99,7 +97,7 @@ class SignUpScreenState extends State<SignUpScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextFormField(
-                      controller: userNameController,
+                      controller: usernameController,
                       decoration: const InputDecoration(
                         labelText: 'Username *',
                       ),
@@ -131,7 +129,13 @@ class SignUpScreenState extends State<SignUpScreen> {
                     ),
                     DropdownButtonFormField<String>(
                       value: selectedGender,
-                      hint: const Text('Select Gender (Optional)'),
+                      decoration: const InputDecoration(
+                        labelText: 'Gender *',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator:
+                          (value) =>
+                              value == null ? 'Please select a gender' : null,
                       items:
                           genderOptions.map((String gender) {
                             return DropdownMenuItem<String>(
@@ -139,12 +143,21 @@ class SignUpScreenState extends State<SignUpScreen> {
                               child: Text(gender),
                             );
                           }).toList(),
-                      onChanged:
-                          (value) => setState(() => selectedGender = value),
+                      onChanged: (value) {
+                        setState(() {
+                          selectedGender = value;
+                        });
+                      },
                     ),
                     DropdownButtonFormField<String>(
                       value: selectedCountry,
-                      hint: const Text('Select Country/Region (Optional)'),
+                      decoration: const InputDecoration(
+                        labelText: 'Country *',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator:
+                          (value) =>
+                              value == null ? 'Please select a country' : null,
                       items:
                           countryOptions.map((String country) {
                             return DropdownMenuItem<String>(
@@ -152,8 +165,11 @@ class SignUpScreenState extends State<SignUpScreen> {
                               child: Text(country),
                             );
                           }).toList(),
-                      onChanged:
-                          (value) => setState(() => selectedCountry = value),
+                      onChanged: (value) {
+                        setState(() {
+                          selectedCountry = value;
+                        });
+                      },
                     ),
                     TextFormField(
                       controller: passwordController,
@@ -174,10 +190,28 @@ class SignUpScreenState extends State<SignUpScreen> {
                         labelText: 'Confirm Password *',
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    ElevatedButton(
-                      onPressed: _signUp,
-                      child: const Text('Sign Up'),
+                    SizedBox(height: 32),
+                    Center(
+                      child: ElevatedButton(
+                        onPressed: _signUp,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.deepOrangeAccent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: EdgeInsets.symmetric(
+                            vertical: 14,
+                            horizontal: 32,
+                          ),
+                        ),
+                        child: Text(
+                          'Sign Up',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
