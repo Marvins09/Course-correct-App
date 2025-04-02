@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "787077151055",
+    "project_id": "course-correct-a2d9b",
+    "storage_bucket": "course-correct-a2d9b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:787077151055:android:7f8c457af8606612abed3a",
+        "android_client_info": {
+          "package_name": "com.example.course_correct.course_correct"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBnrD5qtCgJf1RfGbHa2UT7fK7PZo17hr8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
