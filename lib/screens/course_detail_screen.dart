@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart'; // ✅ Fixed deprecated methods
+import 'package:url_launcher/url_launcher.dart';
 import 'module_content_screen.dart';
 import 'quiz_screen.dart';
 
@@ -24,7 +24,6 @@ class CourseDetailScreenState extends State<CourseDetailScreen> {
   }
 
   Future<void> _fetchUserProgress() async {
-    // ✅ Fetch completed modules from Firestore
     try {
       QuerySnapshot progressSnapshot =
           await _firestore
@@ -129,7 +128,7 @@ class CourseDetailScreenState extends State<CourseDetailScreen> {
                                 ElevatedButton(
                                   onPressed:
                                       isLocked
-                                          ? null // 🔒 Disable if previous module isn't completed
+                                          ? null
                                           : () {
                                             Navigator.push(
                                               context,
@@ -162,9 +161,13 @@ class CourseDetailScreenState extends State<CourseDetailScreen> {
                                               ),
                                             );
                                           }
-                                          : null, // 🔒 Hide if module not completed
+                                          : null,
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.orange,
+                                    backgroundColor:
+                                        isCompleted
+                                            ? Colors.orange
+                                            : Colors
+                                                .grey, // ✅ Grey when disabled
                                   ),
                                   child: const Text("Start Quiz"),
                                 ),
@@ -212,16 +215,35 @@ class CourseDetailScreenState extends State<CourseDetailScreen> {
                         return Column(
                           children:
                               resources.map((resource) {
-                                return ListTile(
-                                  title: Text(
-                                    resource['title'] ?? "Untitled Resource",
+                                return Card(
+                                  margin: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                    horizontal: 4,
                                   ),
-                                  subtitle: Text(resource['url'] ?? "No URL"),
-                                  trailing: IconButton(
-                                    icon: const Icon(Icons.open_in_new),
-                                    onPressed: () {
-                                      _openResource(resource['url']);
-                                    },
+                                  elevation: 3,
+                                  child: ListTile(
+                                    leading: const Icon(
+                                      Icons.link,
+                                      color: Colors.blue,
+                                    ),
+                                    title: Text(
+                                      resource['title'] ?? "Untitled Resource",
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      resource['url'] ?? "No URL",
+                                      style: const TextStyle(
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                    trailing: IconButton(
+                                      icon: const Icon(Icons.open_in_new),
+                                      onPressed: () {
+                                        _openResource(resource['url']);
+                                      },
+                                    ),
                                   ),
                                 );
                               }).toList(),
@@ -246,8 +268,7 @@ class CourseDetailScreenState extends State<CourseDetailScreen> {
 
     final Uri uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
-      // ✅ Fixed deprecated `canLaunch`
-      await launchUrl(uri); // ✅ Fixed deprecated `launch`
+      await launchUrl(uri);
     } else {
       debugPrint("❌ Could not launch $url");
     }

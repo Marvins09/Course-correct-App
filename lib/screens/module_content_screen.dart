@@ -25,6 +25,7 @@ class ModuleContentScreenState extends State<ModuleContentScreen> {
   bool isLoading = true;
   bool hasError = false;
   bool hasScrolledToEnd = false;
+  bool isMarkedDone = false;
   late DateTime _startTime;
   final ScrollController _scrollController = ScrollController();
 
@@ -32,6 +33,7 @@ class ModuleContentScreenState extends State<ModuleContentScreen> {
   void initState() {
     super.initState();
     _fetchCourseMaterials();
+    _checkIfMarkedDone();
     _startTime = DateTime.now();
     _scrollController.addListener(_onScroll);
   }
@@ -79,6 +81,51 @@ class ModuleContentScreenState extends State<ModuleContentScreen> {
     }
   }
 
+  Future<void> _checkIfMarkedDone() async {
+    String? userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+
+    try {
+      DocumentSnapshot userProgress =
+          await _firestore.collection('user_progress').doc(userId).get();
+
+      setState(() {
+        isMarkedDone =
+            (userProgress.data() as Map<String, dynamic>?)?["courses"]?[widget
+                .courseId]?["modules"]?[widget.moduleId]?["completed"] ??
+            false;
+      });
+    } catch (e) {
+      debugPrint("❌ Error checking progress: $e");
+    }
+  }
+
+  Future<void> markAsDone() async {
+    String? userId = _auth.currentUser?.uid;
+    if (userId == null) {
+      debugPrint("❌ User not logged in!");
+      return;
+    }
+
+    try {
+      await _firestore.collection('user_progress').doc(userId).set({
+        "completedModules": FieldValue.arrayUnion([widget.moduleId]),
+      }, SetOptions(merge: true));
+
+      if (!mounted) return;
+
+      setState(() {
+        isMarkedDone = true;
+      });
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Module marked as done!")));
+    } catch (e) {
+      debugPrint("❌ Error: $e");
+    }
+  }
+
   Future<void> updateStudyTime() async {
     String? userId = _auth.currentUser?.uid;
     if (userId == null) return;
@@ -122,36 +169,49 @@ class ModuleContentScreenState extends State<ModuleContentScreen> {
                     textAlign: TextAlign.center,
                   ),
                 )
-                : ListView.builder(
-                  controller: _scrollController,
-                  itemCount: materials.length,
-                  itemBuilder: (context, index) {
-                    var material = materials[index];
-                    return Card(
-                      elevation: 3,
-                      margin: const EdgeInsets.symmetric(vertical: 10),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              material["title"],
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
+                : Column(
+                  children: [
+                    Expanded(
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        itemCount: materials.length,
+                        itemBuilder: (context, index) {
+                          var material = materials[index];
+                          return Card(
+                            elevation: 3,
+                            margin: const EdgeInsets.symmetric(vertical: 10),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    material["title"],
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    material["content"],
+                                    style: const TextStyle(fontSize: 16),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              material["content"],
-                              style: const TextStyle(fontSize: 16),
-                            ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
-                    );
-                  },
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: isMarkedDone ? null : markAsDone,
+                      child: Text(
+                        isMarkedDone ? "✔️ Marked as Done" : "Mark as Done",
+                      ),
+                    ),
+                  ],
                 ),
       ),
     );
