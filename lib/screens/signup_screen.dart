@@ -12,16 +12,15 @@ class SignUpScreen extends StatefulWidget {
 class SignUpScreenState extends State<SignUpScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  final TextEditingController usernameController = TextEditingController();
+  final TextEditingController userNameController = TextEditingController();
   final TextEditingController fullNameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController confirmPasswordController =
       TextEditingController();
   final TextEditingController phoneController = TextEditingController();
-
-  String? selectedGender = 'Male';
-  String? selectedCountry = 'Kenya';
+  String? selectedGender;
+  String? selectedCountry;
 
   final List<String> genderOptions = ['Male', 'Female', 'Other'];
   final List<String> countryOptions = ['Kenya', 'USA', 'UK', 'Canada', 'India'];
@@ -48,23 +47,29 @@ class SignUpScreenState extends State<SignUpScreen> {
           .collection('users')
           .doc(userCredential.user!.uid)
           .set({
-            'userName': usernameController.text.trim(),
+            'userName': userNameController.text.trim(),
             'fullName': fullNameController.text.trim(),
             'email': emailController.text.trim(),
             'phone': phoneController.text.trim(),
             'gender': selectedGender ?? 'Not specified',
             'country': selectedCountry ?? 'Not specified',
-            'profile_picture': '', // Default empty profile picture
+            'profile_picture': '',
             'enrolled_courses': [],
             'completed_courses': [],
+            'course_progress': {},
+            'study_time': 0,
+            'last_active': Timestamp.now(),
+            'notifications': [],
+            'certificates': [],
             'uid': userCredential.user!.uid,
-            'createdAt': FieldValue.serverTimestamp(),
+            'createdAt': Timestamp.now(),
           });
 
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('✅ Signup Successful!')));
+
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
@@ -94,7 +99,7 @@ class SignUpScreenState extends State<SignUpScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextFormField(
-                      controller: usernameController,
+                      controller: userNameController,
                       decoration: const InputDecoration(
                         labelText: 'Username *',
                       ),
@@ -126,13 +131,7 @@ class SignUpScreenState extends State<SignUpScreen> {
                     ),
                     DropdownButtonFormField<String>(
                       value: selectedGender,
-                      decoration: const InputDecoration(
-                        labelText: 'Gender *',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator:
-                          (value) =>
-                              value == null ? 'Please select a gender' : null,
+                      hint: const Text('Select Gender (Optional)'),
                       items:
                           genderOptions.map((String gender) {
                             return DropdownMenuItem<String>(
@@ -140,21 +139,12 @@ class SignUpScreenState extends State<SignUpScreen> {
                               child: Text(gender),
                             );
                           }).toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          selectedGender = value;
-                        });
-                      },
+                      onChanged:
+                          (value) => setState(() => selectedGender = value),
                     ),
                     DropdownButtonFormField<String>(
                       value: selectedCountry,
-                      decoration: const InputDecoration(
-                        labelText: 'Country *',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator:
-                          (value) =>
-                              value == null ? 'Please select a country' : null,
+                      hint: const Text('Select Country/Region (Optional)'),
                       items:
                           countryOptions.map((String country) {
                             return DropdownMenuItem<String>(
@@ -162,11 +152,8 @@ class SignUpScreenState extends State<SignUpScreen> {
                               child: Text(country),
                             );
                           }).toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          selectedCountry = value;
-                        });
-                      },
+                      onChanged:
+                          (value) => setState(() => selectedCountry = value),
                     ),
                     TextFormField(
                       controller: passwordController,

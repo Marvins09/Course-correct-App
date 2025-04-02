@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:course_correct/screens/home_screen.dart';
 import 'package:course_correct/screens/my_courses_screen.dart';
+import 'package:course_correct/screens/account_screen.dart';
 
 class BottomNav extends StatefulWidget {
   const BottomNav({super.key});
@@ -15,7 +16,8 @@ class BottomNavState extends State<BottomNav> {
   final List<Widget> _screens = [
     const HomeScreen(),
     const MyCoursesScreen(),
-  ]; // Ensured const for optimization
+    const AccountScreen(), // Added Account Screen
+  ];
 
   void _onItemTapped(int index) {
     setState(() {
@@ -36,6 +38,7 @@ class BottomNavState extends State<BottomNav> {
             icon: Icon(Icons.bookmark),
             label: 'My Courses',
           ),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Account'),
         ],
       ),
     );

@@ -26,8 +26,7 @@ class HomeScreenState extends State<HomeScreen> {
     if (user != null) {
       DocumentSnapshot userDoc =
           await _firestore.collection('users').doc(user.uid).get();
-
-      if (userDoc.exists) {
+      if (userDoc.exists && mounted) {
         setState(() {
           userName = userDoc['userName'] ?? "Guest";
         });
@@ -35,26 +34,53 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _enrollInCourse(String courseId) async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await _firestore.collection('users').doc(user.uid).update({
+        'enrolledCourses': FieldValue.arrayUnion([courseId]),
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Enrolled Successfully!")));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Course Correct")),
+      appBar: AppBar(
+        title: const Text("Course Correct"),
+        backgroundColor: Colors.teal[900],
+      ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.teal[900],
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(30),
+                bottomRight: Radius.circular(30),
+              ),
+            ),
             child: Text(
-              "Welcome, $userName", // ✅ Now using userName from Firestore
+              "Welcome, $userName",
               style: GoogleFonts.greatVibes(
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
+                color: Colors.white,
               ),
             ).animate().fade(duration: 500.ms).slideX(begin: -0.2, end: 0),
           ),
 
+          const SizedBox(height: 20),
+
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: const Text(
               "Featured Courses",
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
@@ -68,13 +94,10 @@ class HomeScreenState extends State<HomeScreen> {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return const Center(child: Text("No courses available"));
                 }
-
                 var courses = snapshot.data!.docs;
-
                 return Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: GridView.builder(
@@ -89,6 +112,7 @@ class HomeScreenState extends State<HomeScreen> {
                     itemBuilder: (context, index) {
                       var course = courses[index];
                       return _buildCourseCard(
+                        course.id,
                         course["title"],
                         course["category"],
                         course["description"],
@@ -106,6 +130,7 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildCourseCard(
+    String courseId,
     String title,
     String category,
     String description,
@@ -126,7 +151,6 @@ class HomeScreenState extends State<HomeScreen> {
               fit: BoxFit.cover,
             ),
           ),
-
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Column(
@@ -154,6 +178,26 @@ class HomeScreenState extends State<HomeScreen> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+                const SizedBox(height: 8),
+                Center(
+                  child: ElevatedButton(
+                    onPressed: () => _enrollInCourse(courseId),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepOrangeAccent,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text(
+                      "Enroll",
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
                 ),
               ],
             ),

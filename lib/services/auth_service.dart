@@ -15,6 +15,12 @@ class AuthService {
         email: email,
         password: password,
       );
+
+      // Update last active timestamp
+      await _firestore.collection('users').doc(userCredential.user!.uid).update(
+        {'last_active': FieldValue.serverTimestamp()},
+      );
+
       return userCredential.user;
     } catch (e) {
       debugPrint("Error during sign-in: $e");
@@ -57,6 +63,11 @@ class AuthService {
             'createdAt': FieldValue.serverTimestamp(),
             'enrolled_courses': [],
             'completed_courses': [],
+            'course_progress': {}, // Map of courseID: progress
+            'study_time': 0, // Total study time in minutes
+            'last_active': FieldValue.serverTimestamp(),
+            'notifications': {}, // Store notification preferences
+            'certificates': [], // List of completed course certificates
           })
           .then((_) {
             debugPrint("✅ User data added successfully");
