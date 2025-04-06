@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'module_content_screen.dart';
 import 'quiz_screen.dart';
 
@@ -15,7 +15,8 @@ class CourseDetailScreen extends StatefulWidget {
 
 class CourseDetailScreenState extends State<CourseDetailScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  Map<String, bool> completedModules = {}; // ✅ Track completed modules
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  Map<String, bool> completedModules = {};
 
   @override
   void initState() {
@@ -25,12 +26,18 @@ class CourseDetailScreenState extends State<CourseDetailScreen> {
 
   Future<void> _fetchUserProgress() async {
     try {
+      User? user = _auth.currentUser;
+      if (user == null) return;
+
       QuerySnapshot progressSnapshot =
           await _firestore
               .collection('user_progress')
+              .where("userId", isEqualTo: user.uid)
               .where("courseId", isEqualTo: widget.courseId)
               .where("completed", isEqualTo: true)
               .get();
+
+      if (!mounted) return;
 
       setState(() {
         for (var doc in progressSnapshot.docs) {
@@ -41,7 +48,12 @@ class CourseDetailScreenState extends State<CourseDetailScreen> {
         }
       });
     } catch (e) {
-      debugPrint("❌ Error fetching user progress: $e");
+      if (mounted) {
+        debugPrint("❌ Error fetching user progress: $e");
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Failed to load progress!")));
+      }
     }
   }
 
@@ -107,10 +119,6 @@ class CourseDetailScreenState extends State<CourseDetailScreen> {
                         var module = modules[index];
                         String moduleTitle = module['title'] ?? "No Title";
                         String moduleId = module.id;
-                        bool isCompleted = completedModules[moduleId] ?? false;
-                        bool isLocked =
-                            index > 0 &&
-                            !(completedModules[modules[index - 1].id] ?? false);
 
                         return Card(
                           elevation: 4,
@@ -126,48 +134,36 @@ class CourseDetailScreenState extends State<CourseDetailScreen> {
                               spacing: 12,
                               children: [
                                 ElevatedButton(
-                                  onPressed:
-                                      isLocked
-                                          ? null
-                                          : () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder:
-                                                    (
-                                                      context,
-                                                    ) => ModuleContentScreen(
-                                                      courseId: widget.courseId,
-                                                      moduleId: moduleId,
-                                                      moduleTitle: moduleTitle,
-                                                    ),
-                                              ),
-                                            );
-                                          },
-                                  child: Text(isLocked ? "Locked 🔒" : "View"),
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder:
+                                            (context) => ModuleContentScreen(
+                                              courseId: widget.courseId,
+                                              moduleId: moduleId,
+                                              moduleTitle: moduleTitle,
+                                            ),
+                                      ),
+                                    );
+                                  },
+                                  child: const Text("View"),
                                 ),
                                 ElevatedButton(
-                                  onPressed:
-                                      isCompleted
-                                          ? () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder:
-                                                    (context) => QuizScreen(
-                                                      courseId: widget.courseId,
-                                                      moduleId: moduleId,
-                                                    ),
-                                              ),
-                                            );
-                                          }
-                                          : null,
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder:
+                                            (context) => QuizScreen(
+                                              courseId: widget.courseId,
+                                              moduleId: moduleId,
+                                            ),
+                                      ),
+                                    );
+                                  },
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor:
-                                        isCompleted
-                                            ? Colors.orange
-                                            : Colors
-                                                .grey, // ✅ Grey when disabled
+                                    backgroundColor: Colors.orange,
                                   ),
                                   child: const Text("Start Quiz"),
                                 ),
@@ -180,97 +176,10 @@ class CourseDetailScreenState extends State<CourseDetailScreen> {
                   },
                 ),
               ),
-              // ✅ Resources Section
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Resources",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    StreamBuilder<QuerySnapshot>(
-                      stream:
-                          _firestore
-                              .collection('courses')
-                              .doc(widget.courseId)
-                              .collection('resources')
-                              .snapshots(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-                        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                          return const Text("No resources available.");
-                        }
-
-                        var resources = snapshot.data!.docs;
-                        return Column(
-                          children:
-                              resources.map((resource) {
-                                return Card(
-                                  margin: const EdgeInsets.symmetric(
-                                    vertical: 8,
-                                    horizontal: 4,
-                                  ),
-                                  elevation: 3,
-                                  child: ListTile(
-                                    leading: const Icon(
-                                      Icons.link,
-                                      color: Colors.blue,
-                                    ),
-                                    title: Text(
-                                      resource['title'] ?? "Untitled Resource",
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    subtitle: Text(
-                                      resource['url'] ?? "No URL",
-                                      style: const TextStyle(
-                                        color: Colors.grey,
-                                      ),
-                                    ),
-                                    trailing: IconButton(
-                                      icon: const Icon(Icons.open_in_new),
-                                      onPressed: () {
-                                        _openResource(resource['url']);
-                                      },
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
             ],
           );
         },
       ),
     );
-  }
-
-  Future<void> _openResource(String? url) async {
-    if (url == null || url.isEmpty) {
-      debugPrint("❌ Invalid URL");
-      return;
-    }
-
-    final Uri uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    } else {
-      debugPrint("❌ Could not launch $url");
-    }
   }
 }

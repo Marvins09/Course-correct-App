@@ -1,38 +1,51 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+enum ContentType { pdf, docx, txt, image, unknown }
+
 class ContentModel {
   final String id;
   final String title;
-  final String type;
-  final String content;
-  final DateTime createdAt;
+  final String contentUrl;
+  final String? videoUrl; // 👈 Added videoUrl field
+  final ContentType type;
+  final DateTime date;
 
   ContentModel({
     required this.id,
     required this.title,
+    required this.contentUrl,
     required this.type,
-    required this.content,
-    required this.createdAt,
+    required this.date,
+    this.videoUrl,
   });
 
-  // Convert Firestore document to ContentModel
+  // Factory method to create ContentModel from Firestore data
   factory ContentModel.fromFirestore(Map<String, dynamic> data, String docId) {
     return ContentModel(
       id: docId,
       title: data['title'] ?? 'Untitled',
-      type: data['type'] ?? 'text',
-      content: data['content'] ?? '',
-      createdAt: (data['createdAt'] as Timestamp).toDate(),
+      contentUrl: data['contentUrl'] ?? '',
+      videoUrl: data['videoUrl'], // 👈 Fetch from Firestore
+      type: _parseContentType(data['type'] ?? 'unknown'),
+      date: data['createdAt'] != null
+          ? (data['createdAt'] as Timestamp).toDate()
+          : DateTime.now(),
     );
   }
 
-  // Convert ContentModel to Map for Firestore
-  Map<String, dynamic> toFirestore() {
-    return {
-      'title': title,
-      'type': type,
-      'content': content,
-      'createdAt': FieldValue.serverTimestamp(),
-    };
+  // Convert ContentType from Firestore String
+  static ContentType _parseContentType(String? type) {
+    switch (type?.toLowerCase()) {
+      case 'pdf':
+        return ContentType.pdf;
+      case 'docx':
+        return ContentType.docx;
+      case 'txt':
+        return ContentType.txt;
+      case 'image':
+        return ContentType.image;
+      default:
+        return ContentType.unknown;
+    }
   }
 }

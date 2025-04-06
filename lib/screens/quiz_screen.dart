@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 
 class QuizScreen extends StatefulWidget {
   final String courseId;
@@ -14,8 +15,7 @@ class QuizScreen extends StatefulWidget {
 
 class QuizScreenState extends State<QuizScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final String userId =
-      FirebaseAuth.instance.currentUser!.uid; // ✅ Use actual user ID
+  final String userId = FirebaseAuth.instance.currentUser!.uid;
 
   List<Map<String, dynamic>> questions = [];
   Map<int, String> selectedAnswers = {};
@@ -31,7 +31,6 @@ class QuizScreenState extends State<QuizScreen> {
     _fetchUserQuizProgress();
   }
 
-  /// ✅ Fetch quiz questions from Firestore
   Future<void> _fetchQuizQuestions() async {
     try {
       QuerySnapshot querySnapshot =
@@ -50,23 +49,24 @@ class QuizScreenState extends State<QuizScreen> {
                 "id": doc.id,
                 "question": doc["question"],
                 "options": List<String>.from(doc["options"]),
-                "correct_answer": doc["correctAnswer"],
+                "correct_answer": doc["correct_answer"],
                 "explanation": doc["explanation"] ?? "No explanation provided.",
               };
             }).toList();
+        isLoading = false;
       });
     } catch (e) {
       debugPrint("❌ Error fetching quiz questions: $e");
+      setState(() => isLoading = false);
     }
   }
 
-  /// ✅ Fetch user's quiz progress from Firestore
   Future<void> _fetchUserQuizProgress() async {
     try {
       DocumentSnapshot doc =
           await _firestore
               .collection('user_progress')
-              .doc(userId) // ✅ Uses actual user ID
+              .doc(userId)
               .collection('courses')
               .doc(widget.courseId)
               .collection('modules')
@@ -85,10 +85,8 @@ class QuizScreenState extends State<QuizScreen> {
     } catch (e) {
       debugPrint("❌ Error fetching quiz progress: $e");
     }
-    setState(() => isLoading = false);
   }
 
-  /// ✅ Submit quiz and store results in Firestore
   Future<void> _submitQuiz() async {
     correctAnswersCount = 0;
     for (int i = 0; i < questions.length; i++) {
@@ -101,7 +99,7 @@ class QuizScreenState extends State<QuizScreen> {
 
     await _firestore
         .collection('user_progress')
-        .doc(userId) // ✅ Uses actual user ID
+        .doc(userId)
         .collection('courses')
         .doc(widget.courseId)
         .collection('modules')
@@ -115,6 +113,15 @@ class QuizScreenState extends State<QuizScreen> {
           "completedAt": FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
 
+    await _firestore
+        .collection('user_progress')
+        .doc(userId)
+        .collection('courses')
+        .doc(widget.courseId)
+        .collection('modules')
+        .doc(widget.moduleId)
+        .set({"unlocked": true}, SetOptions(merge: true));
+
     setState(() {
       quizCompleted = true;
     });
@@ -124,19 +131,10 @@ class QuizScreenState extends State<QuizScreen> {
     );
   }
 
-  /// ✅ Show SnackBar message
   void _showSnackbar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.green),
     );
-  }
-
-  /// ✅ Retry quiz (reset answers)
-  void _retryQuiz() {
-    setState(() {
-      selectedAnswers.clear();
-      quizCompleted = false;
-    });
   }
 
   @override
@@ -145,9 +143,9 @@ class QuizScreenState extends State<QuizScreen> {
       appBar: AppBar(title: const Text("Quiz")),
       body:
           isLoading
-              ? const Center(child: CircularProgressIndicator())
+              ? Center(child: Lottie.asset('assets/loading.json', width: 150))
               : questions.isEmpty
-              ? const Center(child: Text("No quiz questions available."))
+              ? Center(child: Lottie.asset('assets/no_data.json', width: 200))
               : Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -157,57 +155,42 @@ class QuizScreenState extends State<QuizScreen> {
                         itemCount: questions.length,
                         itemBuilder: (context, index) {
                           return Card(
-                            elevation: 3,
+                            elevation: 5,
                             margin: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                             child: Padding(
-                              padding: const EdgeInsets.all(12.0),
+                              padding: const EdgeInsets.all(16.0),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
                                     "Q${index + 1}: ${questions[index]["question"]}",
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
+                                    style:
+                                        Theme.of(context).textTheme.titleLarge,
                                   ),
-                                  const SizedBox(height: 8),
-                                  Column(
-                                    children:
-                                        (questions[index]["options"]
-                                                as List<String>)
-                                            .map(
-                                              (option) => RadioListTile<String>(
-                                                title: Text(option),
-                                                value: option,
-                                                groupValue:
-                                                    selectedAnswers[index],
-                                                onChanged:
-                                                    quizCompleted
-                                                        ? null
-                                                        : (value) {
-                                                          setState(() {
-                                                            selectedAnswers[index] =
-                                                                value!;
-                                                          });
-                                                        },
-                                              ),
-                                            )
-                                            .toList(),
+                                  ...questions[index]["options"].map<Widget>(
+                                    (option) => RadioListTile<String>(
+                                      title: Text(option),
+                                      value: option,
+                                      groupValue: selectedAnswers[index],
+                                      onChanged:
+                                          quizCompleted
+                                              ? null
+                                              : (value) {
+                                                setState(() {
+                                                  selectedAnswers[index] =
+                                                      value!;
+                                                });
+                                              },
+                                    ),
                                   ),
                                   if (quizCompleted)
                                     Text(
                                       "✔ Correct Answer: ${questions[index]["correct_answer"]}",
                                       style: const TextStyle(
                                         color: Colors.green,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  if (quizCompleted)
-                                    Text(
-                                      "💡 Explanation: ${questions[index]["explanation"]}",
-                                      style: const TextStyle(
-                                        fontStyle: FontStyle.italic,
                                       ),
                                     ),
                                 ],
@@ -221,25 +204,6 @@ class QuizScreenState extends State<QuizScreen> {
                       onPressed: quizCompleted ? null : _submitQuiz,
                       child: const Text("Submit Quiz"),
                     ),
-                    if (quizCompleted)
-                      Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Text(
-                              "🎉 You got $correctAnswersCount/${questions.length} correct!",
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                              ),
-                            ),
-                          ),
-                          ElevatedButton(
-                            onPressed: _retryQuiz,
-                            child: const Text("Retry Quiz"),
-                          ),
-                        ],
-                      ),
                   ],
                 ),
               ),

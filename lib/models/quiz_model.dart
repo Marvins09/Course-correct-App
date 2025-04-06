@@ -17,26 +17,61 @@ class QuizModel {
     required this.createdAt,
   });
 
-  // Convert Firestore document to QuizModel
+  /// ✅ Convert Firestore document to QuizModel
   factory QuizModel.fromFirestore(Map<String, dynamic> data, String docId) {
     return QuizModel(
       id: docId,
       question: data['question'] ?? 'No question available',
-      options: List<String>.from(data['options'] ?? []),
+      options:
+          (data['options'] != null) ? List<String>.from(data['options']) : [],
       correctAnswer: data['correct_answer'] ?? '',
       attempts: data['attempts'] ?? 0,
-      createdAt: (data['createdAt'] as Timestamp).toDate(),
+      createdAt:
+          (data['createdAt'] != null)
+              ? (data['createdAt'] as Timestamp).toDate()
+              : DateTime.now(), // ✅ Handles missing timestamps safely
     );
   }
 
-  // Convert QuizModel to Map for Firestore
+  /// ✅ Convert QuizModel to Map for Firestore
   Map<String, dynamic> toFirestore() {
     return {
       'question': question,
       'options': options,
       'correct_answer': correctAnswer,
       'attempts': attempts,
-      'createdAt': createdAt,
+      'createdAt': Timestamp.fromDate(createdAt), // ✅ Firestore-safe format
     };
+  }
+
+  /// ✅ Convert QuizModel to JSON (for API or local storage)
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'question': question,
+      'options': options,
+      'correct_answer': correctAnswer,
+      'attempts': attempts,
+      'createdAt': createdAt.toIso8601String(),
+    };
+  }
+
+  /// ✅ copyWith method for updating properties
+  QuizModel copyWith({
+    String? id,
+    String? question,
+    List<String>? options,
+    String? correctAnswer,
+    int? attempts,
+    DateTime? createdAt,
+  }) {
+    return QuizModel(
+      id: id ?? this.id,
+      question: question ?? this.question,
+      options: options ?? this.options,
+      correctAnswer: correctAnswer ?? this.correctAnswer,
+      attempts: attempts ?? this.attempts,
+      createdAt: createdAt ?? this.createdAt,
+    );
   }
 }

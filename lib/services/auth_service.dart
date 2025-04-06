@@ -37,7 +37,7 @@ class AuthService {
         'last_active': FieldValue.serverTimestamp(),
       });
 
-      _logger.i("✅ User signed in: ${user.email}");
+      _logger.i("✅ User signed in: \${user.email}");
       return user;
     } catch (e) {
       _logger.e("❌ Error during sign-in: $e");
@@ -111,10 +111,16 @@ class AuthService {
   Future<void> signOut() async {
     try {
       if (_auth.currentUser != null) {
-        // ✅ Update last active timestamp before signing out
-        await _firestore.collection('users').doc(_auth.currentUser!.uid).update(
-          {'last_active': FieldValue.serverTimestamp()},
-        );
+        String? uid = _auth.currentUser?.uid;
+        if (uid != null) {
+          DocumentReference userRef = _firestore.collection('users').doc(uid);
+
+          // Ensure the document exists before updating
+          DocumentSnapshot userDoc = await userRef.get();
+          if (userDoc.exists) {
+            await userRef.update({'last_active': FieldValue.serverTimestamp()});
+          }
+        }
 
         // ✅ Update study time before signing out
         DocumentSnapshot userDoc =

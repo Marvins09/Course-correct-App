@@ -15,13 +15,16 @@ class ModuleModel {
     required this.createdAt,
   });
 
-  // ✅ Convert Firestore document to ModuleModel
+  /// ✅ Convert Firestore document to ModuleModel
   factory ModuleModel.fromFirestore(Map<String, dynamic> data, String docId) {
     return ModuleModel(
       id: docId,
       title: data['title'] ?? 'Untitled',
       description: data['description'] ?? 'No description available',
-      moduleNumber: data['module_number'] ?? 0,
+      moduleNumber:
+          (data['moduleNumber'] is int)
+              ? data['moduleNumber']
+              : (data['moduleNumber'] ?? 0).toInt(),
       createdAt:
           (data['createdAt'] is Timestamp)
               ? (data['createdAt'] as Timestamp).toDate()
@@ -29,19 +32,28 @@ class ModuleModel {
     );
   }
 
-  // ✅ Convert ModuleModel to Map for Firestore
+  /// ✅ Convert ModuleModel to Map for Firestore
   Map<String, dynamic> toFirestore() {
     return {
       'title': title,
       'description': description,
-      'module_number': moduleNumber,
-      'createdAt': Timestamp.fromDate(
-        createdAt,
-      ), // ✅ Ensures correct Firestore format
+      'moduleNumber': moduleNumber,
+      'createdAt': FieldValue.serverTimestamp(), // ✅ Firestore auto-timestamp
     };
   }
 
-  // ✅ copyWith method for updating properties
+  /// ✅ Convert ModuleModel to JSON (for APIs, local storage, etc.)
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'moduleNumber': moduleNumber,
+      'createdAt': createdAt.toIso8601String(),
+    };
+  }
+
+  /// ✅ copyWith method for updating properties
   ModuleModel copyWith({
     String? id,
     String? title,

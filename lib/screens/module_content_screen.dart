@@ -1,6 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:course_correct/services/content_service.dart';
+import 'package:course_correct/models/content_model.dart';
+import 'package:http/http.dart' as http;
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 class ModuleContentScreen extends StatefulWidget {
   final String courseId;
@@ -19,57 +22,25 @@ class ModuleContentScreen extends StatefulWidget {
 }
 
 class ModuleContentScreenState extends State<ModuleContentScreen> {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  List<Map<String, dynamic>> materials = [];
+  List<ContentModel> materials = [];
   bool isLoading = true;
   bool hasError = false;
-  bool hasScrolledToEnd = false;
-  bool isMarkedDone = false;
-  late DateTime _startTime;
-  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _fetchCourseMaterials();
-    _checkIfMarkedDone();
-    _startTime = DateTime.now();
-    _scrollController.addListener(_onScroll);
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels ==
-        _scrollController.position.maxScrollExtent) {
-      setState(() {
-        hasScrolledToEnd = true;
-      });
-    }
   }
 
   Future<void> _fetchCourseMaterials() async {
     try {
-      QuerySnapshot querySnapshot =
-          await _firestore
-              .collection('courses')
-              .doc(widget.courseId)
-              .collection('modules')
-              .doc(widget.moduleId)
-              .collection('contents')
-              .orderBy("createdAt", descending: true)
-              .get();
+      List<ContentModel> data = await ContentService().getContents(
+        widget.courseId,
+        widget.moduleId,
+      );
 
       setState(() {
-        materials =
-            querySnapshot.docs.map((doc) {
-              return {
-                "id": doc.id,
-                "title": doc["title"] ?? "Untitled",
-                "type": doc["type"] ?? "Unknown",
-                "content": doc["content"] ?? "No content available",
-                "createdAt": doc["createdAt"] ?? Timestamp.now(),
-              };
-            }).toList();
+        materials = data;
         isLoading = false;
       });
     } catch (e) {
@@ -81,139 +52,198 @@ class ModuleContentScreenState extends State<ModuleContentScreen> {
     }
   }
 
-  Future<void> _checkIfMarkedDone() async {
-    String? userId = _auth.currentUser?.uid;
-    if (userId == null) return;
-
-    try {
-      DocumentSnapshot userProgress =
-          await _firestore.collection('user_progress').doc(userId).get();
-
-      setState(() {
-        isMarkedDone =
-            (userProgress.data() as Map<String, dynamic>?)?["courses"]?[widget
-                .courseId]?["modules"]?[widget.moduleId]?["completed"] ??
-            false;
-      });
-    } catch (e) {
-      debugPrint("❌ Error checking progress: $e");
+  Widget _buildContentView(ContentModel content) {
+    switch (content.type) {
+      case ContentType.pdf:
+      case ContentType.docx:
+        return _buildWebView(content.contentUrl);
+      case ContentType.txt:
+        return _buildTextView(content.contentUrl);
+      case ContentType.image:
+        return _buildImageView(content.contentUrl);
+      default:
+        return const Center(child: Text("⚠ Unsupported file type."));
     }
   }
 
-  Future<void> markAsDone() async {
-    String? userId = _auth.currentUser?.uid;
-    if (userId == null) {
-      debugPrint("❌ User not logged in!");
-      return;
-    }
-
+  Future<bool> _isValidUrl(String url) async {
     try {
-      await _firestore.collection('user_progress').doc(userId).set({
-        "completedModules": FieldValue.arrayUnion([widget.moduleId]),
-      }, SetOptions(merge: true));
-
-      if (!mounted) return;
-
-      setState(() {
-        isMarkedDone = true;
-      });
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Module marked as done!")));
+      final response = await http.head(Uri.parse(url));
+      return response.statusCode == 200;
     } catch (e) {
-      debugPrint("❌ Error: $e");
+      return false;
     }
   }
 
-  Future<void> updateStudyTime() async {
-    String? userId = _auth.currentUser?.uid;
-    if (userId == null) return;
+  Widget _buildWebView(String url) {
+    return FutureBuilder<bool>(
+      future: _isValidUrl(url),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasError || !(snapshot.data ?? false)) {
+          return const Center(
+            child: Text("⚠ Unable to load document. Check permissions."),
+          );
+        } else {
+          return WebViewWidget(
+            controller: WebViewController()
+              ..setJavaScriptMode(JavaScriptMode.unrestricted)
+              ..loadRequest(Uri.parse(url)),
+          );
+        }
+      },
+    );
+  }
 
-    final DateTime endTime = DateTime.now();
-    final int studyDuration = endTime.difference(_startTime).inSeconds;
+  Widget _buildTextView(String url) {
+    return FutureBuilder<String>(
+      future: _fetchTextFromUrl(url),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasError) {
+          return const Center(child: Text("⚠ Error loading text."));
+        } else {
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: SingleChildScrollView(child: Text(snapshot.data ?? "")),
+          );
+        }
+      },
+    );
+  }
 
+  Widget _buildImageView(String url) {
+    return Center(child: Image.network(url, fit: BoxFit.contain));
+  }
+
+  Future<String> _fetchTextFromUrl(String url) async {
     try {
-      await _firestore.collection('user_progress').doc(userId).set({
-        "courses.${widget.courseId}.modules.${widget.moduleId}.studyTime":
-            FieldValue.increment(studyDuration),
-      }, SetOptions(merge: true));
-
-      debugPrint("✅ Study time updated: $studyDuration seconds");
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        return response.body;
+      } else {
+        debugPrint(
+          "❌ Error fetching text file: Status code \${response.statusCode}",
+        );
+        return "Error loading text content.";
+      }
     } catch (e) {
-      debugPrint("❌ Error updating study time: $e");
+      debugPrint("❌ Error fetching text file: $e");
+      return "Error loading text content.";
     }
   }
 
-  @override
-  void dispose() {
-    updateStudyTime();
-    _scrollController.dispose();
-    super.dispose();
+  Widget _buildResourcesSection(String videoUrl) {
+    final videoId = YoutubePlayerController.convertUrlToId(videoUrl);
+    if (videoId == null) return const SizedBox();
+
+    final controller = YoutubePlayerController.fromVideoId(
+      videoId: videoId,
+      params: const YoutubePlayerParams(
+        showControls: true,
+        showFullscreenButton: true,
+      ),
+    );
+
+    return YoutubePlayerScaffold(
+      controller: controller,
+      builder: (context, player) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12.0),
+              child: Text(
+                'Resources',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: player,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildErrorView() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Text(
+          "⚠ Failed to load materials. Try again later.",
+          style: TextStyle(fontSize: 16, color: Colors.red),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 10),
+        ElevatedButton(
+          onPressed: _fetchCourseMaterials,
+          child: const Text("Retry"),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(widget.moduleTitle)),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child:
-            isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : hasError
-                ? const Center(
-                  child: Text(
-                    "⚠️ Failed to load materials. Try again later.",
-                    style: TextStyle(fontSize: 16, color: Colors.red),
-                    textAlign: TextAlign.center,
-                  ),
-                )
-                : Column(
-                  children: [
-                    Expanded(
-                      child: ListView.builder(
-                        controller: _scrollController,
-                        itemCount: materials.length,
-                        itemBuilder: (context, index) {
-                          var material = materials[index];
-                          return Card(
-                            elevation: 3,
-                            margin: const EdgeInsets.symmetric(vertical: 10),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    material["title"],
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                    ),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : hasError
+              ? _buildErrorView()
+              : materials.isEmpty
+                  ? const Center(child: Text("No content available."))
+                  : SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            for (final content in materials) ...[
+                              Card(
+                                margin: const EdgeInsets.only(bottom: 16),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        content.title,
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      SizedBox(
+                                        height: 750,
+                                        child: _buildContentView(content),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    material["content"],
-                                    style: const TextStyle(fontSize: 16),
-                                  ),
-                                ],
+                                ),
                               ),
-                            ),
-                          );
-                        },
+                            ],
+                            if (materials.first.videoUrl != null &&
+                                materials.first.videoUrl!.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                child: _buildResourcesSection(materials.first.videoUrl!),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: isMarkedDone ? null : markAsDone,
-                      child: Text(
-                        isMarkedDone ? "✔️ Marked as Done" : "Mark as Done",
-                      ),
-                    ),
-                  ],
-                ),
-      ),
     );
   }
 }
