@@ -6,6 +6,10 @@ class CourseModel {
   final String imageUrl;
   final int totalModules;
 
+  // 🆕 Optional additions for enhanced features
+  final int totalPoints; // Total points available in the course
+  final bool isEnrolled; // Whether the user is enrolled (local state)
+
   CourseModel({
     required this.id,
     required this.title,
@@ -13,9 +17,10 @@ class CourseModel {
     required this.category,
     required this.imageUrl,
     required this.totalModules,
+    this.totalPoints = 0,
+    this.isEnrolled = false,
   });
 
-  /// Convert Firestore document to CourseModel
   factory CourseModel.fromMap(String id, Map<String, dynamic> data) {
     return CourseModel(
       id: id,
@@ -23,14 +28,14 @@ class CourseModel {
       description: data['description'] ?? 'No description available',
       category: data['category'] ?? 'Uncategorized',
       imageUrl: data['imageUrl'] ?? '',
-      totalModules:
-          (data['totalModules'] is int)
-              ? data['totalModules']
-              : (data['totalModules'] ?? 0).toInt(),
+      totalModules: (data['totalModules'] is int)
+          ? data['totalModules']
+          : (data['totalModules'] ?? 0).toInt(),
+      totalPoints: (data['totalPoints'] as num?)?.toInt() ?? 0,
+      // `isEnrolled` is a local UI-only flag, not stored in Firestore
     );
   }
 
-  /// Convert CourseModel to Map (for Firestore)
   Map<String, dynamic> toMap() {
     return {
       'title': title,
@@ -38,10 +43,10 @@ class CourseModel {
       'category': category,
       'imageUrl': imageUrl,
       'totalModules': totalModules,
+      'totalPoints': totalPoints,
     };
   }
 
-  /// Copy method for immutability
   CourseModel copyWith({
     String? id,
     String? title,
@@ -49,6 +54,8 @@ class CourseModel {
     String? category,
     String? imageUrl,
     int? totalModules,
+    int? totalPoints,
+    bool? isEnrolled,
   }) {
     return CourseModel(
       id: id ?? this.id,
@@ -57,6 +64,8 @@ class CourseModel {
       category: category ?? this.category,
       imageUrl: imageUrl ?? this.imageUrl,
       totalModules: totalModules ?? this.totalModules,
+      totalPoints: totalPoints ?? this.totalPoints,
+      isEnrolled: isEnrolled ?? this.isEnrolled,
     );
   }
 }

@@ -19,10 +19,11 @@ class CourseProvider extends ChangeNotifier {
       await _firestore.collection('user_progress').doc(userId).set({
         'courses': {
           courseId: {
-            'progress': 0.0, // Start course progress at 0%
-            'enrolledAt': FieldValue.serverTimestamp(),
+            'modules': {}, // No modules completed yet
           },
         },
+        'completedModules': [],
+        'totalPoints': 0,
       }, SetOptions(merge: true));
 
       _enrolledCourses[courseId] = true;
@@ -30,23 +31,6 @@ class CourseProvider extends ChangeNotifier {
       notifyListeners(); // Notify UI to update
     } catch (e) {
       debugPrint("❌ Error enrolling in course: $e");
-    }
-  }
-
-  Future<void> updateCourseProgress(
-    String userId,
-    String courseId,
-    double progress,
-  ) async {
-    try {
-      await _firestore.collection('user_progress').doc(userId).update({
-        'courses.$courseId.progress': progress,
-      });
-
-      _courseProgress[courseId] = progress;
-      notifyListeners();
-    } catch (e) {
-      debugPrint("❌ Error updating course progress: $e");
     }
   }
 
@@ -61,12 +45,21 @@ class CourseProvider extends ChangeNotifier {
           _enrolledCourses.clear();
           _courseProgress.clear();
 
-          (data['courses'] as Map<String, dynamic>).forEach((
-            courseId,
-            details,
-          ) {
+          (data['courses'] as Map<String, dynamic>).forEach((courseId, courseData) {
             _enrolledCourses[courseId] = true;
-            _courseProgress[courseId] = (details['progress'] ?? 0.0).toDouble();
+
+            if (courseData['modules'] is Map) {
+              final modules = courseData['modules'] as Map<String, dynamic>;
+              final completedCount = modules.values
+                  .where((m) => m['completed'] == true)
+                  .length;
+              final totalModules = modules.length;
+              _courseProgress[courseId] = totalModules > 0
+                  ? (completedCount / totalModules)
+                  : 0.0;
+            } else {
+              _courseProgress[courseId] = 0.0;
+            }
           });
 
           notifyListeners();

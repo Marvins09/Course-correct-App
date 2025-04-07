@@ -8,111 +8,180 @@ class ProgressProvider extends ChangeNotifier {
 
   String get userId => _auth.currentUser?.uid ?? "";
 
-  Map<String, bool> completedModules = {};
-  Map<String, int> studyTime = {};
-  Map<String, double> highestQuizScores = {};
-  Map<String, int> quizAttempts = {};
+  Map<String, Map<String, dynamic>> moduleProgress = {}; // moduleId -> data
+  double courseProgress = 0.0;
 
-  /// ✅ **Load user progress from Firestore**
-  Future<void> fetchUserProgress(String courseId) async {
+  /// ✅ Fetch all progress for a course
+  Future<void> fetchCourseProgress(String courseId) async {
     if (userId.isEmpty) return;
 
     try {
-      DocumentSnapshot progressDoc =
-          await _firestore.collection('user_progress').doc(userId).get();
+      DocumentSnapshot doc = await _firestore.collection('user_progress').doc(userId).get();
+      if (!doc.exists) return;
 
-      if (progressDoc.exists) {
-        Map<String, dynamic> data = progressDoc.data() as Map<String, dynamic>;
+      final data = doc.data() as Map<String, dynamic>?;
+      final modules = data?['courses']?[courseId]?['modules'] as Map<String, dynamic>?;
 
-        completedModules = Map<String, bool>.from(
-          data['completedModules'] ?? {},
-        );
-        studyTime = Map<String, int>.from(data['studyTime'] ?? {});
-        highestQuizScores = Map<String, double>.from(
-          data['highestQuizScores'] ?? {},
-        );
-        quizAttempts = Map<String, int>.from(data['quizAttempts'] ?? {});
+      if (modules != null) {
+        moduleProgress.clear();
 
+        modules.forEach((moduleId, moduleData) {
+          moduleProgress[moduleId] = Map<String, dynamic>.from(moduleData);
+        });
+
+        _calculateCourseProgress();
         notifyListeners();
       }
     } catch (e) {
-      debugPrint("❌ Error fetching user progress: $e");
+      debugPrint("❌ Error fetching course progress: $e");
     }
   }
 
-  /// ✅ **Mark a module as completed**
-  Future<void> completeModule(String courseId, String moduleId) async {
+  /// ✅ Update study time
+  Future<void> updateStudyTime(String courseId, String moduleId, int seconds) async {
     if (userId.isEmpty) return;
 
-    if (!isModuleCompleted(courseId, moduleId)) return;
+    final existingTime = moduleProgress[moduleId]?['studyTime'] ?? 0;
+    final updatedTime = existingTime + seconds;
 
-    completedModules[moduleId] = true;
+    moduleProgress[moduleId] = {
+      ...?moduleProgress[moduleId],
+      'studyTime': updatedTime,
+    };
 
     await _firestore.collection('user_progress').doc(userId).set({
-      "completedModules": completedModules,
+      'courses.$courseId.modules.$moduleId.studyTime': updatedTime,
     }, SetOptions(merge: true));
 
     notifyListeners();
   }
 
-  /// ✅ **Update study time**
-  Future<void> updateStudyTime(
-    String courseId,
-    String moduleId,
-    int duration,
-  ) async {
+  /// ✅ Update quiz score & attempts
+  Future<void> updateQuizScore(String courseId, String moduleId, double score) async {
     if (userId.isEmpty) return;
 
-    studyTime[moduleId] = (studyTime[moduleId] ?? 0) + duration;
+    final currentHighest = moduleProgress[moduleId]?['highestScore'] ?? 0.0;
+    final attempts = List<Map<String, dynamic>>.from(
+      moduleProgress[moduleId]?['attempts'] ?? [],
+    );
+
+    final newAttempt = {
+      'score': score,
+      'timestamp': FieldValue.serverTimestamp(),
+    };
+
+    attempts.add(newAttempt);
+
+    final highestScore = score > currentHighest ? score : currentHighest;
+
+    moduleProgress[moduleId] = {
+      ...?moduleProgress[moduleId],
+      'highestScore': highestScore,
+      'attempts': attempts,
+    };
 
     await _firestore.collection('user_progress').doc(userId).set({
-      "studyTime": studyTime,
+      'courses.$courseId.modules.$moduleId.highestScore': highestScore,
+      'courses.$courseId.modules.$moduleId.attempts': attempts,
     }, SetOptions(merge: true));
 
     notifyListeners();
   }
 
-  /// ✅ **Update quiz attempts**
-  Future<void> incrementQuizAttempts(
-    String courseId,
-    String moduleId,
-    String quizId,
-  ) async {
+  /// ✅ Mark module as completed (if score >= 70)
+  Future<void> markModuleComplete(String courseId, String moduleId, double score) async {
     if (userId.isEmpty) return;
 
-    quizAttempts[quizId] = (quizAttempts[quizId] ?? 0) + 1;
-
-    await _firestore.collection('user_progress').doc(userId).set({
-      "quizAttempts": quizAttempts,
-    }, SetOptions(merge: true));
-
-    notifyListeners();
-  }
-
-  /// ✅ **Update highest quiz score**
-  Future<void> updateHighestQuizScore(
-    String courseId,
-    String moduleId,
-    String quizId,
-    double score,
-  ) async {
-    if (userId.isEmpty) return;
-
-    if ((highestQuizScores[quizId] ?? 0) < score) {
-      highestQuizScores[quizId] = score;
+    if (score >= 70) {
+      moduleProgress[moduleId] = {
+        ...?moduleProgress[moduleId],
+        'completed': true,
+        'completedAt': FieldValue.serverTimestamp(),
+      };
 
       await _firestore.collection('user_progress').doc(userId).set({
-        "highestQuizScores": highestQuizScores,
+        'courses.$courseId.modules.$moduleId.completed': true,
+        'courses.$courseId.modules.$moduleId.completedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
+      _calculateCourseProgress();
       notifyListeners();
     }
   }
 
-  /// ✅ **Check if a module is completed (study time + quiz)**
-  bool isModuleCompleted(String courseId, String moduleId) {
-    bool hasStudyTime = (studyTime[moduleId] ?? 0) > 0;
-    bool hasQuizScore = (highestQuizScores[moduleId] ?? 0) > 0;
-    return hasStudyTime && hasQuizScore;
+  /// ✅ Update quiz progress (score, attempts, completion)
+  Future<void> updateQuizProgress(String courseId, String moduleId, int score, {int total = 100}) async {
+    final percentage = (score / total) * 100;
+    await updateQuizScore(courseId, moduleId, percentage);
+    await markModuleComplete(courseId, moduleId, percentage);
   }
+
+  /// ✅ Unlock the next module after completion
+  Future<void> unlockNextModule(String courseId, String currentModuleId) async {
+    try {
+      final courseDoc = await _firestore.collection('courses').doc(courseId).get();
+      final courseData = courseDoc.data();
+      if (courseData == null) return;
+
+      final modules = courseData['modules'] as List<dynamic>?;
+
+      if (modules == null || modules.isEmpty) return;
+
+      final currentIndex = modules.indexOf(currentModuleId);
+      if (currentIndex == -1 || currentIndex + 1 >= modules.length) return;
+
+      final nextModuleId = modules[currentIndex + 1];
+
+      final isAlreadyUnlocked = moduleProgress[nextModuleId]?['unlocked'] == true;
+      if (isAlreadyUnlocked) return;
+
+      // Unlock next module in Firestore
+      await _firestore.collection('user_progress').doc(userId).set({
+        'courses.$courseId.modules.$nextModuleId.unlocked': true,
+      }, SetOptions(merge: true));
+
+      // Update locally
+      moduleProgress[nextModuleId] = {
+        ...?moduleProgress[nextModuleId],
+        'unlocked': true,
+      };
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint("❌ Failed to unlock next module: $e");
+    }
+  }
+
+  /// ✅ Check if a module is completed
+  bool isCompleted(String moduleId) {
+    return moduleProgress[moduleId]?['completed'] == true;
+  }
+
+  /// ✅ Get study time
+  int getStudyTime(String moduleId) {
+    return moduleProgress[moduleId]?['studyTime'] ?? 0;
+  }
+
+  /// ✅ Get highest quiz score
+  double getHighestScore(String moduleId) {
+    return (moduleProgress[moduleId]?['highestScore'] ?? 0.0).toDouble();
+  }
+
+  /// ✅ Get number of attempts
+  int getAttemptCount(String moduleId) {
+    return (moduleProgress[moduleId]?['attempts'] as List?)?.length ?? 0;
+  }
+
+  /// ✅ Calculate course-wide progress %
+  void _calculateCourseProgress() {
+    final total = moduleProgress.length;
+    if (total == 0) {
+      courseProgress = 0;
+    } else {
+      final completed = moduleProgress.values.where((m) => m['completed'] == true).length;
+      courseProgress = (completed / total) * 100;
+    }
+  }
+
+  double getCourseProgressPercent() => courseProgress;
 }

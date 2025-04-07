@@ -1,13 +1,13 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:logger/logger.dart'; // ✅ Import Logger
+import 'package:logger/logger.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final Logger _logger = Logger(); // ✅ Logger Instance
+  final Logger _logger = Logger();
 
-  /// ✅ **Sign in with Email and Password**
+  /// ✅ Sign in with Email and Password
   Future<User?> signInWithEmailAndPassword(
     String email,
     String password,
@@ -24,20 +24,19 @@ class AuthService {
         return null;
       }
 
-      // ✅ Check if the user is disabled
       DocumentSnapshot userDoc =
           await _firestore.collection('users').doc(user.uid).get();
+
       if (userDoc.exists && userDoc['disabled'] == true) {
         _logger.w("🚫 User account is disabled");
         return null;
       }
 
-      // ✅ Update last active timestamp
       await _firestore.collection('users').doc(user.uid).update({
         'last_active': FieldValue.serverTimestamp(),
       });
 
-      _logger.i("✅ User signed in: \${user.email}");
+      _logger.i("✅ User signed in: ${user.email}");
       return user;
     } catch (e) {
       _logger.e("❌ Error during sign-in: $e");
@@ -45,7 +44,7 @@ class AuthService {
     }
   }
 
-  /// ✅ **Register New User**
+  /// ✅ Register New User and Initialize Progress Structure
   Future<User?> registerWithEmailAndPassword(
     String fullName,
     String userName,
@@ -56,19 +55,16 @@ class AuthService {
     String country,
   ) async {
     try {
-      // ✅ Check if email is already registered
-      QuerySnapshot existingUser =
-          await _firestore
-              .collection('users')
-              .where('email', isEqualTo: email.trim())
-              .get();
+      QuerySnapshot existingUser = await _firestore
+          .collection('users')
+          .where('email', isEqualTo: email.trim())
+          .get();
 
       if (existingUser.docs.isNotEmpty) {
         _logger.w("🚫 Email already registered: $email");
         return null;
       }
 
-      // ✅ Create Firebase Authentication User
       UserCredential userCredential = await _auth
           .createUserWithEmailAndPassword(email: email, password: password);
 
@@ -79,6 +75,8 @@ class AuthService {
       }
 
       String userId = user.uid;
+
+      // ✅ Create user personal profile
       await _firestore.collection('users').doc(userId).set({
         'fullName': fullName.trim().isNotEmpty ? fullName.trim() : 'Anonymous',
         'userName': userName.trim().isNotEmpty ? userName.trim() : 'Guest',
@@ -87,16 +85,19 @@ class AuthService {
         'phone': phone.trim().isNotEmpty ? phone.trim() : 'Not provided',
         'gender': gender.isNotEmpty ? gender : 'Not specified',
         'country': country.isNotEmpty ? country : 'Not specified',
-        'profile_picture': '', // Default empty profile picture
+        'profilePicture': '',
         'createdAt': FieldValue.serverTimestamp(),
-        'enrolled_courses': [],
-        'completed_courses': [],
-        'course_progress': {}, // Map of courseID: progress
-        'studyTime': 0, // ✅ Ensure study time is initialized correctly
         'last_active': FieldValue.serverTimestamp(),
-        'notifications': {}, // Store notification preferences
-        'certificates': [], // List of completed course certificates
-        'disabled': false, // ✅ New: Account status tracking
+        'notifications': {},
+        'certificates': [],
+        'disabled': false,
+      });
+
+      // ✅ Initialize user_progress document
+      await _firestore.collection('user_progress').doc(userId).set({
+        'completedModules': [],
+        'courses': {},
+        'totalPoints': 0,
       });
 
       _logger.i("✅ User registered successfully: $email");
@@ -107,45 +108,25 @@ class AuthService {
     }
   }
 
-  /// ✅ **Sign Out User**
+  /// ✅ Sign Out User
   Future<void> signOut() async {
     try {
-      if (_auth.currentUser != null) {
-        String? uid = _auth.currentUser?.uid;
-        if (uid != null) {
-          DocumentReference userRef = _firestore.collection('users').doc(uid);
-
-          // Ensure the document exists before updating
-          DocumentSnapshot userDoc = await userRef.get();
-          if (userDoc.exists) {
-            await userRef.update({'last_active': FieldValue.serverTimestamp()});
-          }
+      final user = _auth.currentUser;
+      if (user != null) {
+        final userRef = _firestore.collection('users').doc(user.uid);
+        DocumentSnapshot userDoc = await userRef.get();
+        if (userDoc.exists) {
+          await userRef.update({'last_active': FieldValue.serverTimestamp()});
         }
 
-        // ✅ Update study time before signing out
-        DocumentSnapshot userDoc =
-            await _firestore
-                .collection('users')
-                .doc(_auth.currentUser!.uid)
-                .get();
-
-        if (userDoc.exists && userDoc['studyTime'] != null) {
-          await _firestore
-              .collection('users')
-              .doc(_auth.currentUser!.uid)
-              .update(
-                {'studyTime': FieldValue.increment(5)}, // ✅ Example increment
-              );
-        }
+        await _auth.signOut();
+        _logger.i("✅ User signed out successfully");
       }
-
-      await _auth.signOut();
-      _logger.i("✅ User signed out successfully");
     } catch (e) {
       _logger.e("❌ Error during sign-out: $e");
     }
   }
 
-  /// ✅ **Get Current Logged-In User**
+  /// ✅ Get Current User
   User? get currentUser => _auth.currentUser;
 }

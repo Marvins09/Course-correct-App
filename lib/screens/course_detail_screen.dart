@@ -29,13 +29,12 @@ class CourseDetailScreenState extends State<CourseDetailScreen> {
       User? user = _auth.currentUser;
       if (user == null) return;
 
-      QuerySnapshot progressSnapshot =
-          await _firestore
-              .collection('user_progress')
-              .where("userId", isEqualTo: user.uid)
-              .where("courseId", isEqualTo: widget.courseId)
-              .where("completed", isEqualTo: true)
-              .get();
+      QuerySnapshot progressSnapshot = await _firestore
+          .collection('user_progress')
+          .where("userId", isEqualTo: user.uid)
+          .where("courseId", isEqualTo: widget.courseId)
+          .where("completed", isEqualTo: true)
+          .get();
 
       if (!mounted) return;
 
@@ -49,10 +48,10 @@ class CourseDetailScreenState extends State<CourseDetailScreen> {
       });
     } catch (e) {
       if (mounted) {
-        debugPrint("❌ Error fetching user progress: $e");
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Failed to load progress!")));
+        debugPrint("\u274c Error fetching user progress: $e");
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to load progress!")),
+        );
       }
     }
   }
@@ -60,10 +59,12 @@ class CourseDetailScreenState extends State<CourseDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Course Details")),
+      appBar: AppBar(
+        title: const Text("Course Details"),
+        backgroundColor: Colors.teal,
+      ),
       body: StreamBuilder<DocumentSnapshot>(
-        stream:
-            _firestore.collection('courses').doc(widget.courseId).snapshots(),
+        stream: _firestore.collection('courses').doc(widget.courseId).snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -77,76 +78,99 @@ class CourseDetailScreenState extends State<CourseDetailScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
                 child: Text(
                   courseData['title'] ?? "Untitled Course",
                   style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
+                    color: Colors.teal,
                   ),
                 ),
               ),
               const Padding(
-                padding: EdgeInsets.all(16.0),
+                padding: EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
                   "Modules",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                 ),
               ),
+              const SizedBox(height: 8),
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
-                  stream:
-                      _firestore
-                          .collection('courses')
-                          .doc(widget.courseId)
-                          .collection('modules')
-                          .snapshots(),
+                  stream: _firestore
+                      .collection('courses')
+                      .doc(widget.courseId)
+                      .collection('modules')
+                      .snapshots(),
                   builder: (context, moduleSnapshot) {
-                    if (moduleSnapshot.connectionState ==
-                        ConnectionState.waiting) {
+                    if (moduleSnapshot.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());
                     }
-                    if (!moduleSnapshot.hasData ||
-                        moduleSnapshot.data!.docs.isEmpty) {
-                      return const Center(child: Text("No modules available."));
+                    if (!moduleSnapshot.hasData || moduleSnapshot.data!.docs.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.info_outline, color: Colors.grey[500], size: 48),
+                            const SizedBox(height: 10),
+                            const Text("No modules available."),
+                          ],
+                        ),
+                      );
                     }
 
                     var modules = moduleSnapshot.data!.docs;
                     return ListView.builder(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: modules.length,
                       itemBuilder: (context, index) {
                         var module = modules[index];
                         String moduleTitle = module['title'] ?? "No Title";
                         String moduleId = module.id;
+                        String moduleDescription = module['description'] ?? "No Description";
+                        bool isCompleted = completedModules[moduleId] ?? false;
 
                         return Card(
-                          elevation: 4,
+                          elevation: 3,
+                          margin: const EdgeInsets.symmetric(vertical: 8),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: ListTile(
-                            title: Text(moduleTitle),
-                            subtitle: Text(
-                              module['description'] ?? "No Description",
+                            title: Text(
+                              moduleTitle,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: Text(moduleDescription),
+                            ),
+                            leading: Icon(
+                              isCompleted ? Icons.check_circle : Icons.lock_open,
+                              color: isCompleted ? Colors.green : Colors.grey,
                             ),
                             trailing: Wrap(
-                              spacing: 12,
+                              spacing: 8,
                               children: [
                                 ElevatedButton(
                                   onPressed: () {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder:
-                                            (context) => ModuleContentScreen(
-                                              courseId: widget.courseId,
-                                              moduleId: moduleId,
-                                              moduleTitle: moduleTitle,
-                                            ),
+                                        builder: (context) => ModuleContentScreen(
+                                          courseId: widget.courseId,
+                                          moduleId: moduleId,
+                                          moduleTitle: moduleTitle,
+                                        ),
                                       ),
                                     );
                                   },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.teal,
+                                  ),
                                   child: const Text("View"),
                                 ),
                                 ElevatedButton(
@@ -154,18 +178,18 @@ class CourseDetailScreenState extends State<CourseDetailScreen> {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder:
-                                            (context) => QuizScreen(
-                                              courseId: widget.courseId,
-                                              moduleId: moduleId,
-                                            ),
+                                        builder: (context) => QuizScreen(
+                                          courseId: widget.courseId,
+                                          moduleId: moduleId,
+                                          moduleTitle: moduleTitle
+                                        ),
                                       ),
                                     );
                                   },
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.orange,
                                   ),
-                                  child: const Text("Start Quiz"),
+                                  child: const Text("Quiz"),
                                 ),
                               ],
                             ),

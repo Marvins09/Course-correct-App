@@ -4,6 +4,7 @@ import 'package:course_correct/services/content_service.dart';
 import 'package:course_correct/models/content_model.dart';
 import 'package:http/http.dart' as http;
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+import 'package:course_correct/screens/quiz_screen.dart';
 
 class ModuleContentScreen extends StatefulWidget {
   final String courseId;
@@ -25,11 +26,28 @@ class ModuleContentScreenState extends State<ModuleContentScreen> {
   List<ContentModel> materials = [];
   bool isLoading = true;
   bool hasError = false;
+  final ScrollController _scrollController = ScrollController();
+  bool _showStartQuiz = false;
 
   @override
   void initState() {
     super.initState();
     _fetchCourseMaterials();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    if (!_showStartQuiz && currentScroll >= maxScroll - 50) {
+      setState(() => _showStartQuiz = true);
+    }
   }
 
   Future<void> _fetchCourseMaterials() async {
@@ -192,6 +210,19 @@ class ModuleContentScreenState extends State<ModuleContentScreen> {
     );
   }
 
+  void _onStartQuizPressed() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => QuizScreen(
+          courseId: widget.courseId,
+          moduleId: widget.moduleId,
+          moduleTitle: widget.moduleTitle,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -200,9 +231,10 @@ class ModuleContentScreenState extends State<ModuleContentScreen> {
           ? const Center(child: CircularProgressIndicator())
           : hasError
               ? _buildErrorView()
-              : materials.isEmpty
-                  ? const Center(child: Text("No content available."))
-                  : SingleChildScrollView(
+              : Stack(
+                  children: [
+                    SingleChildScrollView(
+                      controller: _scrollController,
                       physics: const BouncingScrollPhysics(),
                       child: Padding(
                         padding: const EdgeInsets.all(12.0),
@@ -226,7 +258,7 @@ class ModuleContentScreenState extends State<ModuleContentScreen> {
                                       ),
                                       const SizedBox(height: 10),
                                       SizedBox(
-                                        height: 750,
+                                        height: 500,
                                         child: _buildContentView(content),
                                       ),
                                     ],
@@ -240,10 +272,28 @@ class ModuleContentScreenState extends State<ModuleContentScreen> {
                                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
                                 child: _buildResourcesSection(materials.first.videoUrl!),
                               ),
+                            const SizedBox(height: 100),
                           ],
                         ),
                       ),
                     ),
+                    if (_showStartQuiz)
+                      Positioned(
+                        bottom: 16,
+                        left: 16,
+                        right: 16,
+                        child: ElevatedButton.icon(
+                          onPressed: _onStartQuizPressed,
+                          icon: const Icon(Icons.quiz),
+                          label: const Text("Start Quiz"),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            textStyle: const TextStyle(fontSize: 16),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
     );
   }
 }

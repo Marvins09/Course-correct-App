@@ -13,10 +13,11 @@ class UserService {
           await _firestore.collection('users').doc(user.uid).get();
 
       if (userDoc.exists) {
+        Map<String, dynamic> data = userDoc.data() as Map<String, dynamic>;
         return {
-          "fullName": userDoc["fullName"] ?? "Guest",
-          "email": userDoc["email"] ?? user.email,
-          "profilePicture": userDoc["profilePicture"] ?? "",
+          "fullName": data["fullName"] ?? "Guest",
+          "email": data["email"] ?? user.email,
+          "profilePicture": data["profilePicture"] ?? "",
         };
       }
     }
@@ -32,67 +33,62 @@ class UserService {
     User? user = _auth.currentUser;
     if (user == null) return [];
 
-    QuerySnapshot snapshot =
-        await _firestore
-            .collection('user_progress')
-            .doc(user.uid)
-            .collection('courses')
-            .get();
+    DocumentSnapshot userDoc =
+        await _firestore.collection('users').doc(user.uid).get();
 
-    return snapshot.docs.map((doc) => doc.id).toList();
+    if (userDoc.exists) {
+      Map<String, dynamic> data = userDoc.data() as Map<String, dynamic>;
+      List<dynamic> enrolled = data["enrolledCourses"] ?? [];
+      return List<String>.from(enrolled);
+    }
+
+    return [];
   }
 
-  /// ✅ Fetch user's module progress within a course
+  /// ✅ Fetch user's module completion progress within a course
   Future<Map<String, bool>> getUserModuleProgress(String courseId) async {
     User? user = _auth.currentUser;
     if (user == null) return {};
 
-    QuerySnapshot snapshot =
-        await _firestore
-            .collection('user_progress')
-            .doc(user.uid)
-            .collection('courses')
-            .doc(courseId)
-            .collection('modules')
-            .get();
+    DocumentSnapshot progressDoc =
+        await _firestore.collection('user_progress').doc(user.uid).get();
+
+    if (!progressDoc.exists) return {};
+
+    Map<String, dynamic> data =
+        progressDoc.data() as Map<String, dynamic>? ?? {};
+
+    Map<String, dynamic> courseData =
+        (data['courses'] ?? {})[courseId] ?? {};
+    Map<String, dynamic> modules =
+        (courseData['modules'] ?? {}) as Map<String, dynamic>;
 
     Map<String, bool> progress = {};
-    for (var doc in snapshot.docs) {
-      progress[doc.id] = doc["completed"] ?? false;
-    }
+    modules.forEach((moduleId, moduleData) {
+      progress[moduleId] = moduleData['completed'] ?? false;
+    });
 
     return progress;
   }
 
-  /// ✅ Fetch user's quiz progress for a module
-  Future<Map<String, dynamic>> getUserQuizProgress(
-    String courseId,
-    String moduleId,
-  ) async {
+  /// ✅ Fetch user's quiz progress for a module (simplified)
+  Future<List<Map<String, dynamic>>> getQuizAttempts(
+      String courseId, String moduleId) async {
     User? user = _auth.currentUser;
-    if (user == null) return {};
+    if (user == null) return [];
 
-    QuerySnapshot snapshot =
-        await _firestore
-            .collection('user_progress')
-            .doc(user.uid)
-            .collection('courses')
-            .doc(courseId)
-            .collection('modules')
-            .doc(moduleId)
-            .collection('quizzes')
-            .get();
+    DocumentSnapshot progressDoc =
+        await _firestore.collection('user_progress').doc(user.uid).get();
 
-    Map<String, dynamic> quizProgress = {};
-    for (var doc in snapshot.docs) {
-      quizProgress[doc.id] = {
-        "completed": doc["completed"] ?? false,
-        "score": doc["score"] ?? 0,
-        "attempts": doc["attempts"] ?? 0,
-      };
-    }
+    if (!progressDoc.exists) return [];
 
-    return quizProgress;
+    Map<String, dynamic> data =
+        progressDoc.data() as Map<String, dynamic>? ?? {};
+    var moduleData = data['courses']?[courseId]?['modules']?[moduleId];
+    if (moduleData == null || moduleData['attempts'] == null) return [];
+
+    List<dynamic> attempts = moduleData['attempts'];
+    return List<Map<String, dynamic>>.from(attempts);
   }
 
   /// ✅ Update user profile (e.g., full name, profile picture)

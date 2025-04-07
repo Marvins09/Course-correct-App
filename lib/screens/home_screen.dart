@@ -1,10 +1,10 @@
-import 'dart:math'; // ✅ Import for shuffling
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cached_network_image/cached_network_image.dart'; // ✅ Optimized image loading
+import 'package:cached_network_image/cached_network_image.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -15,8 +15,8 @@ class HomeScreen extends StatefulWidget {
 
 class HomeScreenState extends State<HomeScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  String userName = "Guest"; // Default name if not found
-  List<QueryDocumentSnapshot> courses = []; // ✅ Store courses
+  String userName = "Guest";
+  List<QueryDocumentSnapshot> courses = [];
 
   @override
   void initState() {
@@ -25,7 +25,6 @@ class HomeScreenState extends State<HomeScreen> {
     _fetchCourses();
   }
 
-  /// ✅ Fetch User Name
   Future<void> _getUserName() async {
     User? user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -39,20 +38,18 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// ✅ Fetch Courses from Firestore (Efficient Loading)
   Future<void> _fetchCourses() async {
     try {
-      QuerySnapshot snapshot =
-          await _firestore
-              .collection('courses')
-              .orderBy('title') // ✅ Ensure consistent data fetching
-              .limit(20) // ✅ Fetch a limited number of courses for performance
-              .get();
+      QuerySnapshot snapshot = await _firestore
+          .collection('courses')
+          .orderBy('title')
+          .limit(20)
+          .get();
 
       if (mounted) {
         setState(() {
           courses = snapshot.docs;
-          _shuffleCourses(); // ✅ Shuffle courses after fetching
+          _shuffleCourses();
         });
       }
     } catch (e) {
@@ -60,13 +57,11 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// ✅ Shuffle Courses Randomly
   void _shuffleCourses() {
     courses.shuffle(Random());
-    setState(() {}); // Refresh UI after shuffling
+    setState(() {});
   }
 
-  /// ✅ Enroll User in a Course
   Future<void> _enrollInCourse(String courseId) async {
     User? user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -74,23 +69,46 @@ class HomeScreenState extends State<HomeScreen> {
         'enrolledCourses': FieldValue.arrayUnion([courseId]),
       });
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Enrolled Successfully!")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("🎉 Enrolled Successfully!")),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text("Course Correct"),
-        backgroundColor: Colors.teal[900],
+        backgroundColor: Colors.teal[800],
+        elevation: 0,
+        title: const Text(
+          "Course Correct",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.shuffle), // ✅ Shuffle Button
-            onPressed: _shuffleCourses,
-          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.tealAccent.shade700,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.teal.shade900.withAlpha((0.3 * 255).round()),
+
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  )
+                ],
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.shuffle, color: Colors.white),
+                tooltip: 'Shuffle Courses',
+                onPressed: _shuffleCourses,
+              ),
+            ),
+          )
         ],
       ),
       body: Column(
@@ -99,70 +117,68 @@ class HomeScreenState extends State<HomeScreen> {
           /// ✅ Welcome Banner
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-            decoration: BoxDecoration(
-              color: const Color.fromARGB(255, 0, 70, 58),
-              borderRadius: const BorderRadius.only(
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+            decoration: const BoxDecoration(
+              color: Color.fromARGB(255, 0, 70, 58),
+              borderRadius: BorderRadius.only(
                 bottomLeft: Radius.circular(30),
                 bottomRight: Radius.circular(30),
               ),
             ),
             child: Text(
-              "Welcome, $userName",
-              style: GoogleFonts.greatVibes(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
+              "Welcome, $userName 👋",
+              style: GoogleFonts.poppins(
+                fontSize: 26,
+                fontWeight: FontWeight.w600,
                 color: Colors.white,
               ),
-            ).animate().fade(duration: 500.ms).slideX(begin: -0.2, end: 0),
+            ).animate().fade(duration: 400.ms).slideX(begin: -0.3, end: 0),
           ),
-
           const SizedBox(height: 20),
 
-          /// ✅ Featured Courses Header
+          /// ✅ Header
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: const Text(
               "Featured Courses",
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ).animate().fade(duration: 500.ms).slideX(begin: -0.2, end: 0),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+            ).animate().fade(duration: 400.ms).slideX(begin: -0.2, end: 0),
           ),
+          const SizedBox(height: 10),
 
-          /// ✅ Course GridView
+          /// ✅ Course Grid
           Expanded(
-            child:
-                courses.isEmpty
-                    ? const Center(child: CircularProgressIndicator())
-                    : Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: GridView.builder(
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 10,
-                              mainAxisSpacing: 10,
-                              childAspectRatio: 3 / 4,
-                            ),
-                        itemCount: courses.length,
-                        itemBuilder: (context, index) {
-                          var course = courses[index];
-                          return _buildCourseCard(
-                            course.id,
-                            course["title"],
-                            course["category"],
-                            course["description"],
-                            course["image"],
-                          );
-                        },
+            child: courses.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: GridView.builder(
+                      itemCount: courses.length,
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 14,
+                        mainAxisSpacing: 14,
+                        childAspectRatio: 3 / 4,
                       ),
+                      itemBuilder: (context, index) {
+                        var course = courses[index];
+                        return _buildCourseCard(
+                          course.id,
+                          course["title"],
+                          course["category"],
+                          course["description"],
+                          course["image"],
+                        );
+                      },
                     ),
+                  ),
           ),
         ],
       ),
     );
   }
 
-  /// ✅ Course Card UI
+  /// ✅ Reusable Course Card
   Widget _buildCourseCard(
     String courseId,
     String title,
@@ -171,47 +187,41 @@ class HomeScreenState extends State<HomeScreen> {
     String imageUrl,
   ) {
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 5,
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          /// ✅ Optimized Image Loading
+          /// ✅ Image
           ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             child: CachedNetworkImage(
               imageUrl: imageUrl,
               height: 100,
               width: double.infinity,
               fit: BoxFit.cover,
-              placeholder:
-                  (context, url) =>
-                      const Center(child: CircularProgressIndicator()),
-              errorWidget:
-                  (context, url, error) =>
-                      const Icon(Icons.error, color: Colors.red),
+              placeholder: (context, url) =>
+                  const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              errorWidget: (context, url, error) =>
+                  const Icon(Icons.error, color: Colors.red),
             ),
           ),
+          /// ✅ Content
           Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.all(10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   category,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey,
-                  ),
+                  style: const TextStyle(fontSize: 13, color: Colors.grey),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -220,31 +230,25 @@ class HomeScreenState extends State<HomeScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 12, color: Colors.black54),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Center(
                   child: ElevatedButton(
                     onPressed: () => _enrollInCourse(courseId),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.deepOrangeAccent,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: const Text(
-                      "Enroll",
-                      style: TextStyle(color: Colors.white),
-                    ),
+                    child: const Text("Enroll", style: TextStyle(color: Colors.white)),
                   ),
                 ),
               ],
             ),
           ),
         ],
-      ),
+      ).animate().fade(duration: 500.ms),
     );
   }
 }

@@ -36,119 +36,39 @@ class QuizService {
     }
   }
 
-  /// ✅ Submit Quiz Attempt & Update Progress
-  Future<void> submitQuizAttempt({
+  /// ✅ Record quiz attempt and update user progress
+  Future<void> recordQuizAttempt({
     required String userId,
     required String courseId,
     required String moduleId,
-    required String quizId,
     required int score,
+    required int totalQuestions,
   }) async {
     try {
-      WriteBatch batch = _firestore.batch();
-      DocumentReference quizProgressRef = _firestore
-          .collection('user_progress')
-          .doc(userId)
-          .collection('courses')
-          .doc(courseId)
-          .collection('modules')
-          .doc(moduleId)
-          .collection('quizzes')
-          .doc(quizId);
+      final userDocRef = _firestore.collection('user_progress').doc(userId);
+      final modulePath = 'courses.$courseId.modules.$moduleId';
 
-      batch.set(quizProgressRef, {
-        'quizId': quizId,
-        'score': score,
-        'attempts': FieldValue.increment(1),
-        'completed': score >= 60, // ✅ Mark as completed if score ≥ 60%
-        'completedAt': FieldValue.serverTimestamp(),
+      final passed = score >= 0.7 * totalQuestions;
+
+      await userDocRef.set({
+        '$modulePath.attempts': FieldValue.arrayUnion([
+          {
+            'score': score,
+            'timestamp': FieldValue.serverTimestamp(),
+          }
+        ]),
+        '$modulePath.score': score,
+        '$modulePath.highestScore': score,
+        '$modulePath.completed': passed,
+        if (passed) '$modulePath.completedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      batch.commit();
-      debugPrint("✅ Quiz attempt recorded for $quizId with score: $score");
+      debugPrint("✅ Quiz attempt recorded with score: $score");
     } catch (e) {
-      debugPrint("❌ Error submitting quiz attempt: $e");
+      debugPrint("❌ Error recording quiz attempt: $e");
     }
   }
 
-  /// ✅ Fetch user quiz progress
-  Future<Map<String, dynamic>?> getUserQuizProgress(
-    String userId,
-    String courseId,
-    String moduleId,
-    String quizId,
-  ) async {
-    try {
-      DocumentSnapshot quizSnapshot =
-          await _firestore
-              .collection('user_progress')
-              .doc(userId)
-              .collection('courses')
-              .doc(courseId)
-              .collection('modules')
-              .doc(moduleId)
-              .collection('quizzes')
-              .doc(quizId)
-              .get();
-
-      return quizSnapshot.exists
-          ? quizSnapshot.data() as Map<String, dynamic>
-          : null;
-    } catch (e) {
-      debugPrint("❌ Error fetching user quiz progress: $e");
-      return null;
-    }
-  }
-
-  /// ✅ Check if Quiz is Completed
-  Future<bool> isQuizCompleted(
-    String userId,
-    String courseId,
-    String moduleId,
-    String quizId,
-  ) async {
-    try {
-      DocumentSnapshot doc =
-          await _firestore
-              .collection('user_progress')
-              .doc(userId)
-              .collection('courses')
-              .doc(courseId)
-              .collection('modules')
-              .doc(moduleId)
-              .collection('quizzes')
-              .doc(quizId)
-              .get();
-
-      return doc.exists && (doc["completed"] == true);
-    } catch (e) {
-      debugPrint("❌ Error checking quiz completion: $e");
-      return false;
-    }
-  }
-
-  /// ✅ Delete a Quiz Attempt (if needed)
-  Future<void> deleteQuizAttempt(
-    String userId,
-    String courseId,
-    String moduleId,
-    String quizId,
-  ) async {
-    try {
-      await _firestore
-          .collection('user_progress')
-          .doc(userId)
-          .collection('courses')
-          .doc(courseId)
-          .collection('modules')
-          .doc(moduleId)
-          .collection('quizzes')
-          .doc(quizId)
-          .delete();
-
-      debugPrint("🗑️ Deleted quiz attempt for $quizId");
-    } catch (e) {
-      debugPrint("❌ Error deleting quiz attempt: $e");
-    }
-  }
+  /// ❌ Deprecated: Removed old subcollection-based methods below
+  /// These are no longer needed with the new user_progress structure
 }

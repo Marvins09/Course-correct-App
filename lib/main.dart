@@ -7,7 +7,7 @@ import 'package:course_correct/screens/login_screen.dart';
 import 'package:course_correct/firebase_options.dart';
 import 'package:course_correct/widgets/bottom_nav.dart';
 
-import 'package:course_correct/providers/module_provider.dart';
+import 'package:course_correct/providers/module_provider.dart'; 
 import 'package:course_correct/providers/course_provider.dart';
 import 'package:course_correct/providers/quiz_provider.dart';
 import 'package:course_correct/providers/progress_provider.dart'; // ✅ Added ProgressProvider

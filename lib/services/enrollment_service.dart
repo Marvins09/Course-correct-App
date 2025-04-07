@@ -1,99 +1,80 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart'; // ✅ Import debugPrint()
+import 'package:flutter/foundation.dart';
 
 class EnrollmentService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  /// ✅ Enroll user in a course and initialize progress tracking
+  /// Enroll the user and initialize progress data in new structure
   static Future<void> enrollUser(String courseId) async {
     try {
       String? userId = _auth.currentUser?.uid;
       if (userId == null) {
-        debugPrint("❌ Error: No user logged in.");
+        debugPrint("❌ No user logged in.");
         return;
       }
 
-      DocumentReference userRef = _firestore.collection('users').doc(userId);
-      DocumentSnapshot userSnapshot = await userRef.get();
+      final userRef = _firestore.collection('users').doc(userId);
+      final userSnapshot = await userRef.get();
+
       List<String> enrolledCourses = List<String>.from(
-        userSnapshot['enrolledCourses'] ?? [],
+        userSnapshot.data()?['enrolledCourses'] ?? [],
       );
 
       if (enrolledCourses.contains(courseId)) {
-        debugPrint("⚠️ User is already enrolled in course: $courseId");
+        debugPrint("⚠️ User already enrolled in $courseId");
         return;
       }
 
-      // ✅ Update enrolled courses in user document
+      // ✅ Update user doc: add course to enrolledCourses
       await userRef.set({
         'enrolledCourses': FieldValue.arrayUnion([courseId]),
       }, SetOptions(merge: true));
 
-      debugPrint("✅ User enrolled in course: $courseId");
-
       // ✅ Fetch course modules
-      QuerySnapshot moduleSnapshot =
-          await _firestore
-              .collection('courses')
-              .doc(courseId)
-              .collection('modules')
-              .get();
+      final moduleSnapshot = await _firestore
+          .collection('courses')
+          .doc(courseId)
+          .collection('modules')
+          .get();
 
-      for (var moduleDoc in moduleSnapshot.docs) {
-        String moduleId = moduleDoc.id;
+      Map<String, dynamic> moduleProgressMap = {};
+      final firstModuleId = moduleSnapshot.docs.isNotEmpty ? moduleSnapshot.docs.first.id : null;
 
-        // ✅ Create module progress entry
-        DocumentReference moduleProgressRef = _firestore
-            .collection('user_progress')
-            .doc(userId)
-            .collection('courses')
-            .doc(courseId)
-            .collection('modules')
-            .doc(moduleId);
+      for (var module in moduleSnapshot.docs) {
+        final moduleId = module.id;
 
-        await moduleProgressRef.set({
-          'moduleId': moduleId,
+        moduleProgressMap[moduleId] = {
           'completed': false,
-          'studyTime': 0, // Initial study time in seconds
-          'lastUpdated': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+          'studyTime': 0,
+          'unlocked': moduleId == firstModuleId,
+          'highestScore': 0,
+          'score': 0,
+          'pointsEarned': 0,
+          'attempts': [],
+          'completedAt': null,
+        };
 
-        debugPrint("✅ Created module progress for: $moduleId");
-
-        // ✅ Fetch quizzes for this module
-        QuerySnapshot quizSnapshot =
-            await _firestore
-                .collection('courses')
-                .doc(courseId)
-                .collection('modules')
-                .doc(moduleId)
-                .collection('quizzes')
-                .get();
-
-        for (var quizDoc in quizSnapshot.docs) {
-          String quizId = quizDoc.id;
-
-          // ✅ Pre-create quiz progress entry
-          DocumentReference quizProgressRef = moduleProgressRef
-              .collection('quizzes')
-              .doc(quizId);
-
-          await quizProgressRef.set({
-            'quizId': quizId,
-            'quizAttempts': 0,
-            'quizScore': null, // Score is initially null
-            'lastAttempted': null,
-          }, SetOptions(merge: true));
-
-          debugPrint("✅ Pre-created quiz progress for: $quizId");
-        }
+        debugPrint("✅ Initialized $moduleId");
       }
 
-      debugPrint("🎉 Enrollment & progress setup completed successfully!");
-    } catch (error) {
-      debugPrint("❌ Enrollment Failed: $error");
+      // ✅ Write user progress
+      final progressRef = _firestore.collection('user_progress').doc(userId);
+      await progressRef.set({
+        'courses': {
+          courseId: {
+            'courseId': courseId,
+            'modules': moduleProgressMap,
+          }
+        },
+        'completedModules': [],
+        'totalPoints': 0,
+      }, SetOptions(merge: true));
+
+      debugPrint("🎉 User enrolled & progress initialized for $courseId");
+    } catch (e) {
+      debugPrint("❌ Enrollment failed: $e");
     }
   }
 }

@@ -6,7 +6,10 @@ class ProgressModel {
   final bool isCompleted;
   final DateTime? completedAt;
   final int studyTime;
-  final Map<String, double> quizScores; // Quiz ID -> Score
+  final Map<String, double> quizScores;
+  final double highestScore;
+  final double lastScore;
+  final List<Map<String, dynamic>> attempts;
 
   ProgressModel({
     required this.courseId,
@@ -15,6 +18,9 @@ class ProgressModel {
     this.completedAt,
     required this.studyTime,
     required this.quizScores,
+    this.highestScore = 0.0,
+    this.lastScore = 0.0,
+    this.attempts = const [],
   });
 
   /// ✅ Convert Firestore document to ProgressModel
@@ -34,7 +40,7 @@ class ProgressModel {
       studyTime:
           (data['studyTime'] is int)
               ? data['studyTime']
-              : (data['studyTime'] ?? 0).toInt(), // ✅ Ensures integer type
+              : (data['studyTime'] ?? 0).toInt(),
       quizScores:
           (data['quizScores'] != null)
               ? Map<String, double>.from(
@@ -43,6 +49,11 @@ class ProgressModel {
                 ),
               )
               : {},
+      highestScore: (data['highestScore'] as num?)?.toDouble() ?? 0.0,
+      lastScore: (data['score'] as num?)?.toDouble() ?? 0.0,
+      attempts: List<Map<String, dynamic>>.from(
+        (data['attempts'] ?? []).map((e) => Map<String, dynamic>.from(e)),
+      ),
     );
   }
 
@@ -56,6 +67,9 @@ class ProgressModel {
               : null,
       'studyTime': studyTime,
       'quizScores': quizScores,
+      'highestScore': highestScore,
+      'score': lastScore,
+      'attempts': attempts,
     };
   }
 
@@ -68,6 +82,9 @@ class ProgressModel {
       'completedAt': completedAt?.toIso8601String(),
       'studyTime': studyTime,
       'quizScores': quizScores,
+      'highestScore': highestScore,
+      'score': lastScore,
+      'attempts': attempts,
     };
   }
 
@@ -79,6 +96,9 @@ class ProgressModel {
     DateTime? completedAt,
     int? studyTime,
     Map<String, double>? quizScores,
+    double? highestScore,
+    double? lastScore,
+    List<Map<String, dynamic>>? attempts,
   }) {
     return ProgressModel(
       courseId: courseId ?? this.courseId,
@@ -87,6 +107,9 @@ class ProgressModel {
       completedAt: completedAt ?? this.completedAt,
       studyTime: studyTime ?? this.studyTime,
       quizScores: quizScores ?? this.quizScores,
+      highestScore: highestScore ?? this.highestScore,
+      lastScore: lastScore ?? this.lastScore,
+      attempts: attempts ?? this.attempts,
     );
   }
 }

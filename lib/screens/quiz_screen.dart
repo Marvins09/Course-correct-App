@@ -1,212 +1,163 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:lottie/lottie.dart';
+import 'package:provider/provider.dart';
+import 'package:course_correct/services/quiz_service.dart';
+import 'package:course_correct/providers/progress_provider.dart';
 
 class QuizScreen extends StatefulWidget {
   final String courseId;
   final String moduleId;
+  final String moduleTitle;
 
-  const QuizScreen({super.key, required this.courseId, required this.moduleId});
+  const QuizScreen({super.key, required this.courseId, required this.moduleId, required this.moduleTitle});
 
   @override
-  QuizScreenState createState() => QuizScreenState();
+  State<QuizScreen> createState() => _QuizScreenState();
 }
 
-class QuizScreenState extends State<QuizScreen> {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final String userId = FirebaseAuth.instance.currentUser!.uid;
+class _QuizScreenState extends State<QuizScreen> {
+  final QuizService _quizService = QuizService();
 
-  List<Map<String, dynamic>> questions = [];
-  Map<int, String> selectedAnswers = {};
-  bool quizCompleted = false;
-  int correctAnswersCount = 0;
-  int attempts = 0;
-  bool isLoading = true;
+  List<Map<String, dynamic>> _questions = [];
+  final Map<int, int> _answers = {}; // questionIndex -> selectedOptionIndex
+  bool _isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
-    _fetchQuizQuestions();
-    _fetchUserQuizProgress();
+    _loadQuiz();
   }
 
-  Future<void> _fetchQuizQuestions() async {
+  Future<void> _loadQuiz() async {
     try {
-      QuerySnapshot querySnapshot =
-          await _firestore
-              .collection('courses')
-              .doc(widget.courseId)
-              .collection('modules')
-              .doc(widget.moduleId)
-              .collection('quizzes')
-              .get();
-
+      final questions = await _quizService.getQuizzes(widget.courseId, widget.moduleId);
+      if (!mounted) return;
       setState(() {
-        questions =
-            querySnapshot.docs.map((doc) {
-              return {
-                "id": doc.id,
-                "question": doc["question"],
-                "options": List<String>.from(doc["options"]),
-                "correct_answer": doc["correct_answer"],
-                "explanation": doc["explanation"] ?? "No explanation provided.",
-              };
-            }).toList();
-        isLoading = false;
+        _questions = questions;
       });
     } catch (e) {
-      debugPrint("❌ Error fetching quiz questions: $e");
-      setState(() => isLoading = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to load quiz. Please try again later.")),
+      );
     }
   }
 
-  Future<void> _fetchUserQuizProgress() async {
+  void _submitQuiz() async {
+    if (_answers.length < _questions.length) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please answer all questions.")),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    int correct = 0;
+    for (int i = 0; i < _questions.length; i++) {
+      final selectedIndex = _answers[i];
+      if (selectedIndex != null &&
+          _questions[i]['correct_answer'] == _questions[i]['options'][selectedIndex]) {
+        correct++;
+      }
+    }
+
+    final scorePercent = (correct / _questions.length) * 100;
+    final isPassed = scorePercent >= 70;
+
+    final progressProvider = Provider.of<ProgressProvider>(context, listen: false);
+
     try {
-      DocumentSnapshot doc =
-          await _firestore
-              .collection('user_progress')
-              .doc(userId)
-              .collection('courses')
-              .doc(widget.courseId)
-              .collection('modules')
-              .doc(widget.moduleId)
-              .collection('quizzes')
-              .doc("quiz_progress")
-              .get();
+      await _quizService.recordQuizAttempt(
+        userId: progressProvider.userId,
+        courseId: widget.courseId,
+        moduleId: widget.moduleId,
+        score: correct,
+        totalQuestions: _questions.length,
+      );
 
-      if (doc.exists) {
-        setState(() {
-          quizCompleted = doc["completed"] ?? false;
-          attempts = doc["attempts"] ?? 0;
-          correctAnswersCount = doc["score"] ?? 0;
-        });
+      await progressProvider.updateQuizScore(widget.courseId, widget.moduleId, scorePercent);
+
+      if (isPassed) {
+        await progressProvider.markModuleComplete(widget.courseId, widget.moduleId, scorePercent);
+        await progressProvider.unlockNextModule(widget.courseId, widget.moduleId);
       }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isPassed
+              ? "✅ Quiz passed! Great job!"
+              : "❌ Quiz failed. Try again!"),
+          backgroundColor: isPassed ? Colors.green : Colors.red,
+        ),
+      );
+
+      if (mounted) Navigator.pop(context);
     } catch (e) {
-      debugPrint("❌ Error fetching quiz progress: $e");
-    }
-  }
-
-  Future<void> _submitQuiz() async {
-    correctAnswersCount = 0;
-    for (int i = 0; i < questions.length; i++) {
-      if (selectedAnswers[i] == questions[i]["correct_answer"]) {
-        correctAnswersCount++;
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Something went wrong. Please try again.")),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
       }
     }
-
-    attempts++;
-
-    await _firestore
-        .collection('user_progress')
-        .doc(userId)
-        .collection('courses')
-        .doc(widget.courseId)
-        .collection('modules')
-        .doc(widget.moduleId)
-        .collection('quizzes')
-        .doc("quiz_progress")
-        .set({
-          "completed": true,
-          "score": correctAnswersCount,
-          "attempts": attempts,
-          "completedAt": FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-
-    await _firestore
-        .collection('user_progress')
-        .doc(userId)
-        .collection('courses')
-        .doc(widget.courseId)
-        .collection('modules')
-        .doc(widget.moduleId)
-        .set({"unlocked": true}, SetOptions(merge: true));
-
-    setState(() {
-      quizCompleted = true;
-    });
-
-    _showSnackbar(
-      "🎉 Quiz Submitted! You scored $correctAnswersCount/${questions.length}.",
-    );
-  }
-
-  void _showSnackbar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.green),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Quiz")),
-      body:
-          isLoading
-              ? Center(child: Lottie.asset('assets/loading.json', width: 150))
-              : questions.isEmpty
-              ? Center(child: Lottie.asset('assets/no_data.json', width: 200))
-              : Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: questions.length,
-                        itemBuilder: (context, index) {
-                          return Card(
-                            elevation: 5,
-                            margin: const EdgeInsets.symmetric(vertical: 10),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    "Q${index + 1}: ${questions[index]["question"]}",
-                                    style:
-                                        Theme.of(context).textTheme.titleLarge,
-                                  ),
-                                  ...questions[index]["options"].map<Widget>(
-                                    (option) => RadioListTile<String>(
-                                      title: Text(option),
-                                      value: option,
-                                      groupValue: selectedAnswers[index],
-                                      onChanged:
-                                          quizCompleted
-                                              ? null
-                                              : (value) {
-                                                setState(() {
-                                                  selectedAnswers[index] =
-                                                      value!;
-                                                });
-                                              },
-                                    ),
-                                  ),
-                                  if (quizCompleted)
-                                    Text(
-                                      "✔ Correct Answer: ${questions[index]["correct_answer"]}",
-                                      style: const TextStyle(
-                                        color: Colors.green,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
+      body: _questions.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : ListView.builder(
+              itemCount: _questions.length,
+              itemBuilder: (context, index) {
+                final q = _questions[index];
+                return Card(
+                  margin: const EdgeInsets.all(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Q${index + 1}: ${q['question']}",
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        ...List.generate(q['options'].length, (optIndex) {
+                          return RadioListTile<int>(
+                            title: Text(q['options'][optIndex]),
+                            value: optIndex,
+                            groupValue: _answers[index],
+                            onChanged: (val) {
+                              setState(() {
+                                _answers[index] = val!;
+                              });
+                            },
                           );
-                        },
-                      ),
+                        }),
+                      ],
                     ),
-                    ElevatedButton(
-                      onPressed: quizCompleted ? null : _submitQuiz,
-                      child: const Text("Submit Quiz"),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
+            ),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: ElevatedButton(
+          onPressed: _isSubmitting ? null : _submitQuiz,
+          child: _isSubmitting
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                )
+              : const Text("Submit Quiz"),
+        ),
+      ),
     );
   }
 }
